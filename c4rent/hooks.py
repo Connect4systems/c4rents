@@ -126,6 +126,7 @@ doctype_js = {
 
 doc_events = {
     "Sales Invoice": {
+        "before_cancel": "c4rent.c4rent.doc_events.sales_invoice.before_cancel",
         "on_submit": "c4rent.c4rent.doc_events.sales_invoice.on_submit",
         "on_change": "c4rent.c4rent.doc_events.sales_invoice.on_change",
         "on_cancel": "c4rent.c4rent.doc_events.sales_invoice.on_cancel"

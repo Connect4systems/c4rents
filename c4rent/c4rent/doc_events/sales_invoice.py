@@ -6,6 +6,36 @@ RENT_STATUS_RETURNED = "Returned"
 RENT_STATUS_PARTIAL_RETURNED = "Partial Returned"
 RENT_STATUS_SUBMITTED = "Submitted"
 
+def before_cancel(doc, method):
+    """
+    BEFORE Sales Invoice cancel (runs before validation):
+    Fully unlink all references between Rent, Stock Entry, and Sales Invoice
+    to avoid 'linked document' errors during cancellation.
+    """
+    try:
+        rent_name = doc.get("rent")
+        if rent_name:
+            # Unlink sales_invoice and stock_entry from Rent
+            frappe.db.set_value("Rent", rent_name, "sales_invoice", None)
+            frappe.db.set_value("Rent", rent_name, "sales_invoice_status", None)
+            frappe.db.set_value("Rent", rent_name, "stock_entry", None)
+        # Find all related Stock Entries
+        stock_entries = frappe.get_all(
+            "Stock Entry",
+            filters={"sales_invoice": doc.name, "docstatus": 1},
+            pluck="name"
+        )
+        # Unlink rent from all Stock Entries
+        for stock_entry_name in stock_entries:
+            frappe.db.set_value("Stock Entry", stock_entry_name, "rent", None)
+            frappe.db.set_value("Stock Entry", stock_entry_name, "sales_invoice", None)
+        # Unlink rent and stock_entry from Sales Invoice
+        frappe.db.set_value("Sales Invoice", doc.name, "rent", None)
+        if hasattr(doc, "stock_entry"):
+            frappe.db.set_value("Sales Invoice", doc.name, "stock_entry", None)
+    except Exception as e:
+        frappe.log_error(str(e), "Sales Invoice Before Cancel Error")
+
 def on_submit(doc, method):
     """
     يتم استدعاؤها عند اعتماد فاتورة مبيعات.
@@ -37,16 +67,12 @@ def on_change(doc, method):
 
 def on_cancel(doc, method):
     """
-    On Sales Invoice cancel:
-    1. Fully unlink all references between Rent, Stock Entry, and Sales Invoice
-    2. Cancel all related Stock Entries
-    3. Update Rent status to 'Submitted'
+    On Sales Invoice cancel (after validation):
+    1. Cancel all related Stock Entries
+    2. Update Rent status to 'Submitted'
     """
     try:
         rent_name = doc.get("rent")
-        # Fully unlink all references before cancellation
-        if rent_name:
-            frappe.call("c4rent.c4rent.doctype.rent.rent.full_unlink_rent", rent_name=rent_name)
         # Find all related Stock Entries
         stock_entries = frappe.get_all(
             "Stock Entry",
