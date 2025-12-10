@@ -199,4 +199,37 @@ def make_payment_entry(source_name, target_doc=None):
     payment_entry.party = doc.customer
     payment_entry.party_name = doc.customer
     payment_entry.rent = doc.name
-    return payment_entry        
+    return payment_entry
+
+@frappe.whitelist()
+def full_unlink_rent(rent_name):
+    """
+    Unlink all references between Rent, Stock Entry, and Sales Invoice for a given Rent document.
+    This is useful to run before cancelling any document to avoid linked document errors.
+    """
+    rent_doc = frappe.get_doc("Rent", rent_name)
+    # Unlink sales_invoice and stock_entry from Rent
+    frappe.db.set_value("Rent", rent_name, "sales_invoice", None)
+    frappe.db.set_value("Rent", rent_name, "sales_invoice_status", None)
+    frappe.db.set_value("Rent", rent_name, "stock_entry", None)
+    # Unlink rent from all Stock Entries
+    stock_entries = frappe.get_all(
+        "Stock Entry",
+        filters={"rent": rent_name, "docstatus": 1},
+        pluck="name"
+    )
+    for stock_entry_name in stock_entries:
+        frappe.db.set_value("Stock Entry", stock_entry_name, "rent", None)
+        frappe.db.set_value("Stock Entry", stock_entry_name, "sales_invoice", None)
+    # Unlink rent from all Sales Invoices
+    sales_invoices = frappe.get_all(
+        "Sales Invoice",
+        filters={"rent": rent_name, "docstatus": 1},
+        pluck="name"
+    )
+    for sinv_name in sales_invoices:
+        frappe.db.set_value("Sales Invoice", sinv_name, "rent", None)
+        frappe.db.set_value("Sales Invoice", sinv_name, "stock_entry", None)
+    # Update Rent status
+    frappe.db.set_value("Rent", rent_name, "status", "Submitted")
+    return f"Unlinked Rent {rent_name} from all related documents and reset status."

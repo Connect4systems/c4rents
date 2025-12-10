@@ -38,39 +38,21 @@ def on_change(doc, method):
 def on_cancel(doc, method):
     """
     On Sales Invoice cancel:
-    1. Unlink all Stock Entries from Rent and Sales Invoice
-    2. Unlink sales invoice and stock entry from Rent
-    3. Unlink rent and sales invoice from all Stock Entries
-    4. Unlink stock entry and rent from Sales Invoice (if fields exist)
-    5. Cancel all related Stock Entries
-    6. Update Rent status to 'Submitted'
+    1. Fully unlink all references between Rent, Stock Entry, and Sales Invoice
+    2. Cancel all related Stock Entries
+    3. Update Rent status to 'Submitted'
     """
     try:
         rent_name = doc.get("rent")
+        # Fully unlink all references before cancellation
+        if rent_name:
+            frappe.call("c4rent.c4rent.doctype.rent.rent.full_unlink_rent", rent_name=rent_name)
         # Find all related Stock Entries
         stock_entries = frappe.get_all(
             "Stock Entry",
             filters={"sales_invoice": doc.name, "docstatus": 1},
             pluck="name"
         )
-        # Unlink all Stock Entries from Rent and Sales Invoice
-        for stock_entry_name in stock_entries:
-            frappe.db.set_value("Stock Entry", stock_entry_name, "rent", None)
-            frappe.db.set_value("Stock Entry", stock_entry_name, "sales_invoice", None)
-        # Unlink sales invoice and stock entry from Rent
-        if rent_name:
-            frappe.db.set_value("Rent", rent_name, "sales_invoice", None)
-            frappe.db.set_value("Rent", rent_name, "sales_invoice_status", None)
-            frappe.db.set_value("Rent", rent_name, "stock_entry", None)
-        # Unlink rent and sales invoice from all Stock Entries
-        for stock_entry_name in stock_entries:
-            frappe.db.set_value("Stock Entry", stock_entry_name, "rent", None)
-            frappe.db.set_value("Stock Entry", stock_entry_name, "sales_invoice", None)
-        # Unlink stock entry and rent from Sales Invoice (if fields exist)
-        if hasattr(doc, "stock_entry"):
-            doc.stock_entry = None
-        if hasattr(doc, "rent"):
-            doc.rent = None
         # Cancel all Stock Entries
         for stock_entry_name in stock_entries:
             stock_entry = frappe.get_doc("Stock Entry", stock_entry_name)
