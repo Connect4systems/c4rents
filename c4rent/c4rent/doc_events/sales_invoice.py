@@ -40,22 +40,36 @@ def on_cancel(doc, method):
     يتم استدعاؤها عند إلغاء فاتورة مبيعات.
     
     تقوم بـ:
-    1. إلغاء Stock Entry المرتبطة بالفاتورة
-    2. فك ربط مستند Rent من الفاتورة
-    3. إعادة تعيين حالة Rent إلى "Submitted"
+    1. فك ربط Rent من Stock Entry قبل إلغاء الفاتورة
+    2. إلغاء Stock Entry المرتبطة بالفاتورة
+    3. فك ربط مستند Rent من الفاتورة
+    4. إعادة تعيين حالة Rent إلى "Submitted"
     
     Args:
         doc (frappe.Document): فاتورة المبيعات المراد إلغاؤها.
         method (str): اسم الطريقة التي تم استدعاء الدالة بواسطتها.
     """
     try:
-        # 1. إلغاء Stock Entry المرتبطة بهذه الفاتورة
+        # 1. فك ربط Stock Entry من Rent قبل الإلغاء
         stock_entries = frappe.get_all(
             "Stock Entry",
             filters={"sales_invoice": doc.name, "docstatus": 1},
             pluck="name"
         )
         
+        for stock_entry_name in stock_entries:
+            try:
+                stock_entry = frappe.get_doc("Stock Entry", stock_entry_name)
+                # فك ربط Rent من Stock Entry
+                if stock_entry.get("rent"):
+                    frappe.db.set_value("Stock Entry", stock_entry_name, "rent", None)
+            except Exception as e:
+                frappe.log_error(
+                    _("Error unlinking Rent from Stock Entry {0}: {1}").format(stock_entry_name, str(e)),
+                    "Stock Entry Unlink"
+                )
+        
+        # 2. إلغاء Stock Entry المرتبطة بهذه الفاتورة
         for stock_entry_name in stock_entries:
             try:
                 stock_entry = frappe.get_doc("Stock Entry", stock_entry_name)
@@ -71,7 +85,7 @@ def on_cancel(doc, method):
                     indicator='red'
                 )
         
-        # 2. فك ربط Rent من الفاتورة وإعادة تعيين حالة Rent
+        # 3. فك ربط Rent من الفاتورة وإعادة تعيين حالة Rent
         if doc.get("rent"):
             try:
                 rent_doc = frappe.get_doc("Rent", doc.rent)
