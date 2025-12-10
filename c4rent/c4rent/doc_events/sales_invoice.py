@@ -4,6 +4,7 @@ from collections import defaultdict
 
 RENT_STATUS_RETURNED = "Returned"
 RENT_STATUS_PARTIAL_RETURNED = "Partial Returned"
+RENT_STATUS_SUBMITTED = "Submitted"
 
 def on_submit(doc, method):
     """
@@ -33,6 +34,84 @@ def on_submit(doc, method):
 def on_change(doc, method):
     if doc.get("rent"):
         frappe.db.set_value("Rent", doc.rent, "sales_invoice_status", doc.status)
+
+def on_cancel(doc, method):
+    """
+    يتم استدعاؤها عند إلغاء فاتورة مبيعات.
+    
+    تقوم بـ:
+    1. إلغاء Stock Entry المرتبطة بالفاتورة
+    2. فك ربط مستند Rent من الفاتورة
+    3. إعادة تعيين حالة Rent إلى "Submitted"
+    
+    Args:
+        doc (frappe.Document): فاتورة المبيعات المراد إلغاؤها.
+        method (str): اسم الطريقة التي تم استدعاء الدالة بواسطتها.
+    """
+    try:
+        # 1. إلغاء Stock Entry المرتبطة بهذه الفاتورة
+        stock_entries = frappe.get_all(
+            "Stock Entry",
+            filters={"sales_invoice": doc.name, "docstatus": 1},
+            pluck="name"
+        )
+        
+        for stock_entry_name in stock_entries:
+            try:
+                stock_entry = frappe.get_doc("Stock Entry", stock_entry_name)
+                stock_entry.cancel()
+                frappe.msgprint(
+                    _("Stock Entry {0} has been cancelled.").format(stock_entry_name),
+                    alert=True
+                )
+            except Exception as e:
+                frappe.msgprint(
+                    _("Failed to cancel Stock Entry {0}: {1}").format(stock_entry_name, str(e)),
+                    alert=True,
+                    indicator='red'
+                )
+        
+        # 2. فك ربط Rent من الفاتورة وإعادة تعيين حالة Rent
+        if doc.get("rent"):
+            try:
+                rent_doc = frappe.get_doc("Rent", doc.rent)
+                
+                # إعادة تعيين حالة Rent إلى "Submitted"
+                frappe.db.set_value("Rent", doc.rent, "status", RENT_STATUS_SUBMITTED)
+                
+                # فك ربط الفاتورة من Rent
+                frappe.db.set_value("Rent", doc.rent, "sales_invoice", None)
+                frappe.db.set_value("Rent", doc.rent, "sales_invoice_status", None)
+                
+                frappe.msgprint(
+                    _("Rent {0} has been unlinked from this Sales Invoice.").format(doc.rent),
+                    alert=True
+                )
+            except frappe.DoesNotExistError:
+                frappe.msgprint(
+                    _("Rent document {0} does not exist.").format(doc.rent),
+                    alert=True,
+                    indicator='yellow'
+                )
+            except Exception as e:
+                frappe.msgprint(
+                    _("Failed to unlink Rent {0}: {1}").format(doc.rent, str(e)),
+                    alert=True,
+                    indicator='red'
+                )
+    
+    except Exception as e:
+        frappe.log_error(
+            _("Error during Sales Invoice cancellation: {0}").format(str(e)),
+            "Sales Invoice Cancel"
+        )
+        frappe.msgprint(
+            _("An error occurred during the cancellation process. Please check the error logs."),
+            alert=True,
+            indicator='red'
+        )
+
+
 
 def update_rent_status(rent_doc, sales_invoice_doc):
     """
