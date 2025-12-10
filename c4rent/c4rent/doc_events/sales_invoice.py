@@ -40,59 +40,89 @@ def on_cancel(doc, method):
     يتم استدعاؤها عند إلغاء فاتورة مبيعات.
     
     تقوم بـ:
-    1. فك ربط Sales Invoice من Rent أولاً (قبل الإلغاء)
-    2. فك ربط Rent من Stock Entry قبل إلغاء الفاتورة
-    3. إلغاء Stock Entry المرتبطة بالفاتورة مع تجاهل الارتباطات
-    4. إعادة تعيين حالة Rent إلى "Submitted"
+    1. فك ربط Sales Invoice من Rent
+    2. فك ربط Stock Entry من Rent (حقل stock_entry)
+    3. فك ربط Rent من جميع Stock Entries
+    4. إلغاء Stock Entry المرتبطة بالفاتورة
+    5. إعادة تعيين حالة Rent إلى "Submitted"
     
     Args:
         doc (frappe.Document): فاتورة المبيعات المراد إلغاؤها.
         method (str): اسم الطريقة التي تم استدعاء الدالة بواسطتها.
     """
     try:
-        # 0. فك ربط Sales Invoice من Rent أولاً لتجنب خطأ الارتباط
-        if doc.get("rent"):
+        rent_name = doc.get("rent")
+        
+        # 0. فك ربط Sales Invoice من Rent أولاً
+        if rent_name:
             try:
-                frappe.db.set_value("Rent", doc.rent, "sales_invoice", None)
-                frappe.db.set_value("Rent", doc.rent, "sales_invoice_status", None)
+                frappe.db.set_value("Rent", rent_name, "sales_invoice", None)
+                frappe.db.set_value("Rent", rent_name, "sales_invoice_status", None)
                 frappe.log_error(
-                    _("Unlinked Sales Invoice {0} from Rent {1}").format(doc.name, doc.rent),
-                    "Sales Invoice Cancel - Pre-unlink"
+                    _("Step 0: Unlinked Sales Invoice {0} from Rent {1}").format(doc.name, rent_name),
+                    "Sales Invoice Cancel - Step 0"
                 )
             except Exception as e:
                 frappe.log_error(
-                    _("Error unlinking Sales Invoice from Rent: {0}").format(str(e)),
-                    "Sales Invoice Cancel - Pre-unlink"
+                    _("Error in Step 0 - unlinking Sales Invoice from Rent: {0}").format(str(e)),
+                    "Sales Invoice Cancel - Step 0"
                 )
         
-        # 1. الحصول على جميع Stock Entries المرتبطة
+        # 1. الحصول على جميع Stock Entries المرتبطة بهذه الفاتورة
         stock_entries = frappe.get_all(
             "Stock Entry",
             filters={"sales_invoice": doc.name, "docstatus": 1},
             pluck="name"
         )
         
-        # 2. فك ربط Rent من Stock Entry وإلغاء المستند
+        frappe.log_error(
+            _("Step 1: Found {0} Stock Entries to cancel").format(len(stock_entries)),
+            "Sales Invoice Cancel - Step 1"
+        )
+        
+        # 2. فك ربط Stock Entry من Rent في حقل stock_entry الخاص به
+        if rent_name:
+            try:
+                rent_doc = frappe.get_doc("Rent", rent_name)
+                if rent_doc.get("stock_entry"):
+                    frappe.db.set_value("Rent", rent_name, "stock_entry", None)
+                    frappe.log_error(
+                        _("Step 2: Cleared stock_entry field from Rent {0}").format(rent_name),
+                        "Sales Invoice Cancel - Step 2"
+                    )
+            except Exception as e:
+                frappe.log_error(
+                    _("Error in Step 2 - clearing stock_entry from Rent: {0}").format(str(e)),
+                    "Sales Invoice Cancel - Step 2"
+                )
+        
+        # 3. فك ربط Rent من جميع Stock Entries المرتبطة
         for stock_entry_name in stock_entries:
             try:
-                # إعادة تحميل المستند للحصول على أحدث النسخة
+                frappe.db.set_value("Stock Entry", stock_entry_name, "rent", None)
+                frappe.db.set_value("Stock Entry", stock_entry_name, "customer", None)
+                frappe.log_error(
+                    _("Step 3: Unlinked Rent from Stock Entry {0}").format(stock_entry_name),
+                    "Sales Invoice Cancel - Step 3"
+                )
+            except Exception as e:
+                frappe.log_error(
+                    _("Error in Step 3 - unlinking Stock Entry {0}: {1}").format(stock_entry_name, str(e)),
+                    "Sales Invoice Cancel - Step 3"
+                )
+        
+        # 4. إلغاء Stock Entries
+        for stock_entry_name in stock_entries:
+            try:
                 stock_entry = frappe.get_doc("Stock Entry", stock_entry_name)
-                
-                # فك ربط Rent من Stock Entry
-                if stock_entry.get("rent"):
-                    frappe.db.set_value("Stock Entry", stock_entry_name, "rent", None)
-                    frappe.db.set_value("Stock Entry", stock_entry_name, "customer", None)
-                
-                # إعادة تحميل المستند بعد التحديثات
-                stock_entry = frappe.get_doc("Stock Entry", stock_entry_name)
-                
-                # إلغاء المستند مع تجاهل الارتباطات
-                stock_entry.ignore_linked_doctypes = ["Rent"]
                 stock_entry.cancel()
-                
                 frappe.msgprint(
                     _("Stock Entry {0} has been cancelled.").format(stock_entry_name),
                     alert=True
+                )
+                frappe.log_error(
+                    _("Step 4: Cancelled Stock Entry {0}").format(stock_entry_name),
+                    "Sales Invoice Cancel - Step 4"
                 )
             except Exception as e:
                 frappe.msgprint(
@@ -100,28 +130,33 @@ def on_cancel(doc, method):
                     alert=True,
                     indicator='red'
                 )
+                frappe.log_error(
+                    _("Error in Step 4 - cancelling Stock Entry {0}: {1}").format(stock_entry_name, str(e)),
+                    "Sales Invoice Cancel - Step 4"
+                )
         
-        # 3. إعادة تعيين حالة Rent إلى "Submitted"
-        if doc.get("rent"):
+        # 5. إعادة تعيين حالة Rent إلى "Submitted"
+        if rent_name:
             try:
-                rent_doc = frappe.get_doc("Rent", doc.rent)
-                
-                # إعادة تعيين حالة Rent إلى "Submitted"
-                frappe.db.set_value("Rent", doc.rent, "status", RENT_STATUS_SUBMITTED)
-                
+                rent_doc = frappe.get_doc("Rent", rent_name)
+                frappe.db.set_value("Rent", rent_name, "status", RENT_STATUS_SUBMITTED)
                 frappe.msgprint(
-                    _("Rent {0} has been unlinked and status reset to Submitted.").format(doc.rent),
+                    _("Rent {0} has been unlinked and status reset to Submitted.").format(rent_name),
                     alert=True
+                )
+                frappe.log_error(
+                    _("Step 5: Reset Rent {0} status to Submitted").format(rent_name),
+                    "Sales Invoice Cancel - Step 5"
                 )
             except frappe.DoesNotExistError:
                 frappe.msgprint(
-                    _("Rent document {0} does not exist.").format(doc.rent),
+                    _("Rent document {0} does not exist.").format(rent_name),
                     alert=True,
                     indicator='yellow'
                 )
             except Exception as e:
                 frappe.msgprint(
-                    _("Failed to update Rent {0}: {1}").format(doc.rent, str(e)),
+                    _("Failed to update Rent {0}: {1}").format(rent_name, str(e)),
                     alert=True,
                     indicator='red'
                 )
