@@ -38,14 +38,16 @@ def on_change(doc, method):
 def on_cancel(doc, method):
     """
     On Sales Invoice cancel:
-    1. Unlink sales invoice from Rent (fields: sales_invoice, sales_invoice_status)
-    2. Unlink stock_entry from Rent (field: stock_entry)
-    3. Unlink rent from all related Stock Entries (field: rent)
+    1. Unlink all Stock Entries from Rent automatically
+    2. Unlink sales invoice from Rent (fields: sales_invoice, sales_invoice_status)
+    3. Unlink stock_entry from Rent (field: stock_entry)
     4. Cancel all related Stock Entries
     5. Update Rent status to 'Submitted'
     """
     try:
         rent_name = doc.get("rent")
+        # Unlink all Stock Entries from Rent automatically
+        unlink_stock_entries_from_rent(doc.name)
         # Unlink sales invoice from Rent
         if rent_name:
             frappe.db.set_value("Rent", rent_name, "sales_invoice", None)
@@ -59,9 +61,6 @@ def on_cancel(doc, method):
         # Unlink stock_entry from Rent
         if rent_name:
             frappe.db.set_value("Rent", rent_name, "stock_entry", None)
-        # Unlink rent from all Stock Entries
-        for stock_entry_name in stock_entries:
-            frappe.db.set_value("Stock Entry", stock_entry_name, "rent", None)
         # Cancel all Stock Entries
         for stock_entry_name in stock_entries:
             stock_entry = frappe.get_doc("Stock Entry", stock_entry_name)
@@ -163,3 +162,19 @@ def create_stock_entry(doc):
         new.cost_center = doc.cost_center
     new_doc.insert(ignore_permissions=True)
     new_doc.submit()
+
+@frappe.whitelist()
+def unlink_stock_entries_from_rent(sales_invoice_name):
+    """
+    Unlink all Stock Entries from Rent for a given Sales Invoice.
+    Call this before cancelling the Sales Invoice to avoid linked document errors.
+    """
+    stock_entries = frappe.get_all(
+        "Stock Entry",
+        filters={"sales_invoice": sales_invoice_name, "docstatus": 1},
+        pluck="name"
+    )
+    for stock_entry_name in stock_entries:
+        frappe.db.set_value("Stock Entry", stock_entry_name, "rent", None)
+        frappe.db.set_value("Stock Entry", stock_entry_name, "customer", None)
+    return f"Unlinked {len(stock_entries)} Stock Entries from Rent for Sales Invoice {sales_invoice_name}."
