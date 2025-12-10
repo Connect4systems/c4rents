@@ -40,6 +40,7 @@
   "column_break_xmyy",
   "stock_entry",
   "sales_invoice",
+  "sales_invoice_status",
   "source_warehouse",
   "target_warehouse",
   "section_break_5qhcf",
@@ -214,7 +215,6 @@
    "read_only": 1
   },
   {
-   "default": "\u0639\u0645\u0644\u0627\u0621 - EA",
    "fieldname": "target_warehouse",
    "fieldtype": "Link",
    "label": "Target Warehouse",
@@ -247,6 +247,7 @@
    "options": "Warehouse"
   },
   {
+   "allow_on_submit": 1,
    "fieldname": "sales_invoice",
    "fieldtype": "Link",
    "label": "Sales Invoice",
@@ -291,6 +292,14 @@
   {
    "fieldname": "column_break_xmyy",
    "fieldtype": "Column Break"
+  },
+  {
+   "allow_on_submit": 1,
+   "fetch_from": "sales_invoice.status",
+   "fieldname": "sales_invoice_status",
+   "fieldtype": "Data",
+   "label": "Sales Invoice Status",
+   "read_only": 1
   }
  ],
  "icon": "fa fa-clock-o",
@@ -302,14 +311,14 @@
   },
   {
    "link_doctype": "Payment Entry",
-   "link_fieldname": "reference_name"
+   "link_fieldname": "rent"
   },
   {
    "link_doctype": "Stock Entry",
    "link_fieldname": "rent"
   }
  ],
- "modified": "2025-02-13 00:19:05.973864",
+ "modified": "2025-03-16 23:37:36.238013",
  "modified_by": "Administrator",
  "module": "C4Rent",
  "name": "Rent",

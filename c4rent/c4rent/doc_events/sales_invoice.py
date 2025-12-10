@@ -27,6 +27,12 @@ def on_submit(doc, method):
         # يمكنك اختيارياً طباعة رسالة هنا إذا كان عدم وجود Rent أمرًا غير متوقع
         # frappe.msgprint(_("Rent is not linked to this Sales Invoice."))
         pass
+# def on_update_after_submit(doc, method):
+#     rent_doc = frappe.get_doc("Rent", doc.rent)
+#     frappe.db.set_value('Rent', rent_doc.name , 'sales_invoice_status', doc.status)
+def on_change(doc, method):
+    if doc.get("rent"):
+        frappe.db.set_value("Rent", doc.rent, "sales_invoice_status", doc.status)
 
 def update_rent_status(rent_doc, sales_invoice_doc):
     """
@@ -87,11 +93,10 @@ def update_rent_status(rent_doc, sales_invoice_doc):
 
     # تحديث حالة الـ Rent بناءً على النتائج
     if is_returned:
-        rent_doc.status = RENT_STATUS_RETURNED
+        frappe.db.set_value('Rent', rent_doc.name , 'status', RENT_STATUS_RETURNED)
     elif is_partial_returned:
-        rent_doc.status = RENT_STATUS_PARTIAL_RETURNED
-
-    rent_doc.save()
+        frappe.db.set_value('Rent', rent_doc.name , 'status', RENT_STATUS_PARTIAL_RETURNED)
+    frappe.db.set_value('Rent', rent_doc.name , 'sales_invoice', sales_invoice_doc.name) 
 def create_stock_entry(doc):
     """
     يتم استدعاؤها عند اعتماد المستند.
@@ -114,5 +119,6 @@ def create_stock_entry(doc):
         new.item_name = d.item_name
         new.qty = d.rent_qty
         new.customer = doc.customer
+        new.cost_center = doc.cost_center
     new_doc.insert(ignore_permissions=True)
     new_doc.submit()

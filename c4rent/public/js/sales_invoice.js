@@ -35,25 +35,41 @@ const check_remaining_quantities = (frm) => {
 };
 
 const fetch_items = (frm, remaining_items) => {
-    frm.clear_table('items');
-    
-    remaining_items.forEach(item => {
-        const row = frm.add_child('items');
-        row.item_code = item.item_code;
-        row.item_name = item.item_name;
-        row.description = item.item_name;
-        row.income_account = 'خدمة - EA';
-        row.rate = item.rate;
-        row.uom = item.uom;
-        row.rent_detail = item.name;
-        row.rent_qty = item.remaining_qty;
-        
-        if(frm.doc.selling_price_list == "Daily") {
-            calculate_daily_quantities(frm, item, row);
+    // جلب قيمة income_account بشكل غير متزامن
+    frappe.db.get_single_value('Rent Settings', 'income_account')
+    .then(incomeAccount => {
+        if (!incomeAccount) {
+            frappe.msgprint({
+                title: __("إعدادات ناقصة"),
+                indicator: "red",
+                message: __("يجب تعبئة حقل 'Income Account' في إعدادات التأجير قبل المتابعة")
+            });
+            return; // إيقاف التنفيذ إذا لم توجد القيمة
         }
+
+        frm.clear_table('items');
+        
+        remaining_items.forEach(item => {
+            const row = frm.add_child('items');
+            row.item_code = item.item_code;
+            row.item_name = item.item_name;
+            row.description = item.item_name;
+            row.income_account = incomeAccount; // استخدام القيمة التي تم جلبها
+            row.rate = item.rate;
+            row.uom = item.uom;
+            row.rent_detail = item.name;
+            row.rent_qty = item.remaining_qty;
+            
+            if(frm.doc.selling_price_list == "Daily") {
+                calculate_daily_quantities(frm, item, row);
+            }
+        });
+        
+        frm.refresh_field('items');
+    })
+    .catch(error => {
+        console.error('Error fetching income account:', error);
     });
-    
-    frm.refresh_field('items');
 };
 
 const calculate_daily_quantities = (frm, item, row) => {

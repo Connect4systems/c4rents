@@ -61,6 +61,7 @@ class Rent(Document):
             new.item_code = d.item_code
             new.item_name = d.item_name
             new.qty = d.qty
+            new.cost_center = self.cost_center
             new.customer = self.customer
         new_doc.insert(ignore_permissions=True)
         new_doc.submit()
@@ -188,3 +189,14 @@ class Rent(Document):
         except Exception as e:
             frappe.log_error(_("Error fetching items for Item Group '{0}'. Error: {1}").format(item_group, str(e)), "get_items")
             return []
+
+@frappe.whitelist()
+def make_payment_entry(source_name, target_doc=None):
+    doc = frappe.get_doc("Rent", source_name)
+    payment_entry = frappe.new_doc("Payment Entry")
+    payment_entry.payment_type = "Receive"
+    payment_entry.party_type = "Customer"
+    payment_entry.party = doc.customer
+    payment_entry.party_name = doc.customer
+    payment_entry.rent = doc.name
+    return payment_entry        
