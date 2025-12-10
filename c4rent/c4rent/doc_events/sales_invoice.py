@@ -182,6 +182,40 @@ def create_stock_entry(doc):
     new_doc.submit()
 
 @frappe.whitelist()
+def unlink_all_before_cancel(sales_invoice_name, rent_name):
+    """
+    Unlink all references before cancellation.
+    This must be called BEFORE attempting to cancel the Sales Invoice.
+    """
+    try:
+        # Unlink from Rent
+        if rent_name:
+            frappe.db.set_value("Rent", rent_name, "sales_invoice", None)
+            frappe.db.set_value("Rent", rent_name, "sales_invoice_status", None)
+            frappe.db.set_value("Rent", rent_name, "stock_entry", None)
+        
+        # Find all Stock Entries
+        stock_entries = frappe.get_all(
+            "Stock Entry",
+            filters={"sales_invoice": sales_invoice_name, "docstatus": 1},
+            pluck="name"
+        )
+        
+        # Unlink from Stock Entries
+        for stock_entry_name in stock_entries:
+            frappe.db.set_value("Stock Entry", stock_entry_name, "rent", None)
+            frappe.db.set_value("Stock Entry", stock_entry_name, "sales_invoice", None)
+            frappe.db.set_value("Stock Entry", stock_entry_name, "customer", None)
+        
+        # Unlink from Sales Invoice
+        frappe.db.set_value("Sales Invoice", sales_invoice_name, "rent", None)
+        
+        return f"Successfully unlinked all references. You can now cancel the Sales Invoice."
+    except Exception as e:
+        frappe.log_error(str(e), "Unlink Before Cancel Error")
+        return f"Error: {str(e)}"
+
+@frappe.whitelist()
 def unlink_stock_entries_from_rent(sales_invoice_name):
     """
     Unlink all Stock Entries from Rent for a given Sales Invoice.
