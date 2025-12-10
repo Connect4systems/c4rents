@@ -42,7 +42,7 @@ def on_cancel(doc, method):
     تقوم بـ:
     1. فك ربط Sales Invoice من Rent أولاً (قبل الإلغاء)
     2. فك ربط Rent من Stock Entry قبل إلغاء الفاتورة
-    3. إلغاء Stock Entry المرتبطة بالفاتورة
+    3. إلغاء Stock Entry المرتبطة بالفاتورة مع تجاهل الارتباطات
     4. إعادة تعيين حالة Rent إلى "Submitted"
     
     Args:
@@ -65,30 +65,31 @@ def on_cancel(doc, method):
                     "Sales Invoice Cancel - Pre-unlink"
                 )
         
-        # 1. فك ربط Stock Entry من Rent قبل الإلغاء
+        # 1. الحصول على جميع Stock Entries المرتبطة
         stock_entries = frappe.get_all(
             "Stock Entry",
             filters={"sales_invoice": doc.name, "docstatus": 1},
             pluck="name"
         )
         
+        # 2. فك ربط Rent من Stock Entry وإلغاء المستند
         for stock_entry_name in stock_entries:
             try:
+                # إعادة تحميل المستند للحصول على أحدث النسخة
                 stock_entry = frappe.get_doc("Stock Entry", stock_entry_name)
+                
                 # فك ربط Rent من Stock Entry
                 if stock_entry.get("rent"):
                     frappe.db.set_value("Stock Entry", stock_entry_name, "rent", None)
-            except Exception as e:
-                frappe.log_error(
-                    _("Error unlinking Rent from Stock Entry {0}: {1}").format(stock_entry_name, str(e)),
-                    "Stock Entry Unlink"
-                )
-        
-        # 2. إلغاء Stock Entry المرتبطة بهذه الفاتورة
-        for stock_entry_name in stock_entries:
-            try:
+                    frappe.db.set_value("Stock Entry", stock_entry_name, "customer", None)
+                
+                # إعادة تحميل المستند بعد التحديثات
                 stock_entry = frappe.get_doc("Stock Entry", stock_entry_name)
+                
+                # إلغاء المستند مع تجاهل الارتباطات
+                stock_entry.ignore_linked_doctypes = ["Rent"]
                 stock_entry.cancel()
+                
                 frappe.msgprint(
                     _("Stock Entry {0} has been cancelled.").format(stock_entry_name),
                     alert=True
