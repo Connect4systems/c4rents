@@ -40,9 +40,9 @@ def on_cancel(doc, method):
     يتم استدعاؤها عند إلغاء فاتورة مبيعات.
     
     تقوم بـ:
-    1. فك ربط Rent من Stock Entry قبل إلغاء الفاتورة
-    2. إلغاء Stock Entry المرتبطة بالفاتورة
-    3. فك ربط مستند Rent من الفاتورة
+    1. فك ربط Sales Invoice من Rent أولاً (قبل الإلغاء)
+    2. فك ربط Rent من Stock Entry قبل إلغاء الفاتورة
+    3. إلغاء Stock Entry المرتبطة بالفاتورة
     4. إعادة تعيين حالة Rent إلى "Submitted"
     
     Args:
@@ -50,6 +50,21 @@ def on_cancel(doc, method):
         method (str): اسم الطريقة التي تم استدعاء الدالة بواسطتها.
     """
     try:
+        # 0. فك ربط Sales Invoice من Rent أولاً لتجنب خطأ الارتباط
+        if doc.get("rent"):
+            try:
+                frappe.db.set_value("Rent", doc.rent, "sales_invoice", None)
+                frappe.db.set_value("Rent", doc.rent, "sales_invoice_status", None)
+                frappe.log_error(
+                    _("Unlinked Sales Invoice {0} from Rent {1}").format(doc.name, doc.rent),
+                    "Sales Invoice Cancel - Pre-unlink"
+                )
+            except Exception as e:
+                frappe.log_error(
+                    _("Error unlinking Sales Invoice from Rent: {0}").format(str(e)),
+                    "Sales Invoice Cancel - Pre-unlink"
+                )
+        
         # 1. فك ربط Stock Entry من Rent قبل الإلغاء
         stock_entries = frappe.get_all(
             "Stock Entry",
@@ -85,7 +100,7 @@ def on_cancel(doc, method):
                     indicator='red'
                 )
         
-        # 3. فك ربط Rent من الفاتورة وإعادة تعيين حالة Rent
+        # 3. إعادة تعيين حالة Rent إلى "Submitted"
         if doc.get("rent"):
             try:
                 rent_doc = frappe.get_doc("Rent", doc.rent)
@@ -93,12 +108,8 @@ def on_cancel(doc, method):
                 # إعادة تعيين حالة Rent إلى "Submitted"
                 frappe.db.set_value("Rent", doc.rent, "status", RENT_STATUS_SUBMITTED)
                 
-                # فك ربط الفاتورة من Rent
-                frappe.db.set_value("Rent", doc.rent, "sales_invoice", None)
-                frappe.db.set_value("Rent", doc.rent, "sales_invoice_status", None)
-                
                 frappe.msgprint(
-                    _("Rent {0} has been unlinked from this Sales Invoice.").format(doc.rent),
+                    _("Rent {0} has been unlinked and status reset to Submitted.").format(doc.rent),
                     alert=True
                 )
             except frappe.DoesNotExistError:
@@ -109,7 +120,7 @@ def on_cancel(doc, method):
                 )
             except Exception as e:
                 frappe.msgprint(
-                    _("Failed to unlink Rent {0}: {1}").format(doc.rent, str(e)),
+                    _("Failed to update Rent {0}: {1}").format(doc.rent, str(e)),
                     alert=True,
                     indicator='red'
                 )
