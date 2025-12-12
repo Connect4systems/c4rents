@@ -8,10 +8,56 @@ frappe.ui.form.on("Sales Invoice", {
 
     },
     
+    after_save: function(frm) {
+        // Add button after save for submitted documents
+        if (frm.doc.docstatus === 1 && frm.doc.rent) {
+            add_unlink_cancel_button(frm);
+        }
+    },
+    
     validate: function(frm) {
         validate_remaining_quantities(frm);
     }
 });
+
+const add_unlink_cancel_button = (frm) => {
+    if (!frm.page.btn_unlink_cancel_added) {
+        frm.add_custom_button(__('Unlink & Cancel'), function() {
+            frappe.confirm(
+                __('This will unlink Rent and Stock Entries, then cancel the Sales Invoice. Continue?'),
+                function() {
+                    frappe.call({
+                        method: 'c4rent.c4rent.doc_events.sales_invoice.cancel_sales_invoice_with_unlink',
+                        args: {
+                            sales_invoice_name: frm.doc.name,
+                            rent_name: frm.doc.rent
+                        },
+                        callback: function(r) {
+                            if (r.message) {
+                                frappe.msgprint({
+                                    title: __('Success'),
+                                    indicator: 'green',
+                                    message: r.message
+                                });
+                                setTimeout(() => {
+                                    frappe.ui.form.FormPage.go_back();
+                                }, 1000);
+                            }
+                        },
+                        error: function(r) {
+                            frappe.msgprint({
+                                title: __('Error'),
+                                indicator: 'red',
+                                message: r.responseText || __('Failed to cancel Sales Invoice')
+                            });
+                        }
+                    });
+                }
+            );
+        }, __('Rent'));
+        frm.page.btn_unlink_cancel_added = true;
+    }
+};
 
 const check_remaining_quantities = (frm) => {
     frappe.call({
