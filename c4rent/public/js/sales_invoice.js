@@ -5,6 +5,11 @@ frappe.ui.form.on("Sales Invoice", {
             check_remaining_quantities(frm);
             }
         }
+        
+        // Add button on load for submitted documents
+        if (frm.doc.docstatus === 1 && frm.doc.rent) {
+            add_unlink_cancel_button(frm);
+        }
 
     },
     
@@ -40,8 +45,8 @@ const add_unlink_cancel_button = (frm) => {
                                     message: r.message
                                 });
                                 setTimeout(() => {
-                                    frappe.ui.form.FormPage.go_back();
-                                }, 1000);
+                                    location.reload();
+                                }, 1500);
                             }
                         },
                         error: function(r) {
@@ -55,6 +60,9 @@ const add_unlink_cancel_button = (frm) => {
                 }
             );
         }, __('Rent'));
+        
+        // Make button red/danger style
+        frm.page.custom_actions.find('button:contains("Unlink & Cancel")').addClass('btn-danger');
         frm.page.btn_unlink_cancel_added = true;
     }
 };
