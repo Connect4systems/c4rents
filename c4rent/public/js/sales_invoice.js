@@ -13,7 +13,7 @@ frappe.ui.form.on("Sales Invoice", {
                     __('This will unlink Rent and Stock Entries, then cancel the Sales Invoice. Continue?'),
                     function() {
                         frappe.call({
-                            method: 'c4rent.c4rent.doc_events.sales_invoice.unlink_all_before_cancel',
+                            method: 'c4rent.c4rent.doc_events.sales_invoice.cancel_sales_invoice_with_unlink',
                             args: {
                                 sales_invoice_name: frm.doc.name,
                                 rent_name: frm.doc.rent
@@ -25,12 +25,17 @@ frappe.ui.form.on("Sales Invoice", {
                                         indicator: 'green',
                                         message: r.message
                                     });
-                                    // Reload and cancel
-                                    frm.reload_doc();
                                     setTimeout(() => {
-                                        frm.amend_doc();
+                                        frappe.ui.form.FormPage.go_back();
                                     }, 1000);
                                 }
+                            },
+                            error: function(r) {
+                                frappe.msgprint({
+                                    title: __('Error'),
+                                    indicator: 'red',
+                                    message: r.responseText || __('Failed to cancel Sales Invoice')
+                                });
                             }
                         });
                     }

@@ -182,6 +182,58 @@ def create_stock_entry(doc):
     new_doc.submit()
 
 @frappe.whitelist()
+def cancel_sales_invoice_with_unlink(sales_invoice_name, rent_name):
+    """
+    Unlink all references AND cancel the Sales Invoice in one operation.
+    This bypasses Frappe's linked document validation.
+    """
+    try:
+        # Step 1: Unlink from Rent
+        if rent_name:
+            frappe.db.set_value("Rent", rent_name, "sales_invoice", None)
+            frappe.db.set_value("Rent", rent_name, "sales_invoice_status", None)
+            frappe.db.set_value("Rent", rent_name, "stock_entry", None)
+        
+        # Step 2: Find all Stock Entries
+        stock_entries = frappe.get_all(
+            "Stock Entry",
+            filters={"sales_invoice": sales_invoice_name, "docstatus": 1},
+            pluck="name"
+        )
+        
+        # Step 3: Unlink from Stock Entries
+        for stock_entry_name in stock_entries:
+            frappe.db.set_value("Stock Entry", stock_entry_name, "rent", None)
+            frappe.db.set_value("Stock Entry", stock_entry_name, "sales_invoice", None)
+            frappe.db.set_value("Stock Entry", stock_entry_name, "customer", None)
+        
+        # Step 4: Unlink from Sales Invoice
+        frappe.db.set_value("Sales Invoice", sales_invoice_name, "rent", None)
+        
+        # Step 5: Cancel all Stock Entries
+        for stock_entry_name in stock_entries:
+            try:
+                stock_entry_doc = frappe.get_doc("Stock Entry", stock_entry_name)
+                stock_entry_doc.cancel()
+            except Exception as e:
+                frappe.log_error(f"Failed to cancel Stock Entry {stock_entry_name}: {str(e)}", "Cancel Stock Entry Error")
+        
+        # Step 6: Cancel the Sales Invoice itself
+        sales_invoice_doc = frappe.get_doc("Sales Invoice", sales_invoice_name)
+        sales_invoice_doc.cancel()
+        
+        # Step 7: Update Rent status
+        if rent_name:
+            frappe.db.set_value("Rent", rent_name, "status", RENT_STATUS_SUBMITTED)
+        
+        frappe.db.commit()
+        return f"Successfully cancelled Sales Invoice {sales_invoice_name} and all related Stock Entries."
+    except Exception as e:
+        frappe.db.rollback()
+        frappe.log_error(str(e), "Cancel Sales Invoice With Unlink Error")
+        raise frappe.ValidationError(f"Error during cancellation: {str(e)}")
+
+@frappe.whitelist()
 def unlink_all_before_cancel(sales_invoice_name, rent_name):
     """
     Unlink all references before cancellation.
