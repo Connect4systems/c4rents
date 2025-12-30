@@ -61,6 +61,8 @@ class Rent(Document):
             new.item_code = d.item_code
             new.item_name = d.item_name
             new.qty = d.qty
+            new.s_warehouse = self.source_warehouse  # Set source warehouse from parent
+            new.t_warehouse = self.target_warehouse  # Set target warehouse from parent
             new.cost_center = self.cost_center
             new.customer = self.customer
         new_doc.insert(ignore_permissions=True)
@@ -128,6 +130,8 @@ class Rent(Document):
             new.item_code = d.item_code
             new.item_name = d.item_name
             new.qty = d.qty
+            new.s_warehouse = self.target_warehouse  # Set source warehouse from parent (reversed)
+            new.t_warehouse = self.source_warehouse  # Set target warehouse from parent (reversed)
             new.customer = self.customer
         new_doc.insert(ignore_permissions=True)
         new_doc.submit()

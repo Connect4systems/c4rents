@@ -176,6 +176,8 @@ def create_stock_entry(doc):
         new.item_code = d.item_code
         new.item_name = d.item_name
         new.qty = d.rent_qty
+        new.s_warehouse = doc.from_warehouse  # Set source warehouse from parent
+        new.t_warehouse = doc.to_warehouse    # Set target warehouse from parent
         new.customer = doc.customer
         new.cost_center = doc.cost_center
     new_doc.insert(ignore_permissions=True)

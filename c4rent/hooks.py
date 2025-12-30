@@ -133,6 +133,10 @@ doc_events = {
     },
     "Payment Entry": {
         "on_submit": "c4rent.c4rent.doc_events.payment_entry.on_submit"
+    },
+    "Stock Entry": {
+        "before_insert": "c4rent.c4rent.doc_events.stock_entry.before_insert",
+        "before_save": "c4rent.c4rent.doc_events.stock_entry.before_save"
     }
 }
 
